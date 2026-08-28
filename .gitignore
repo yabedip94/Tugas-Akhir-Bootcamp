@@ -1,0 +1,16 @@
+target/
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+logs/
+test-output/
+target-gr/
+*.log
+*.png
+*.jpeg
+*.jpg
+.env

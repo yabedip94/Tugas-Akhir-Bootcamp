@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
 <suite name="Hadir Automation Test Suite" verbose="1">
-    <test name="Hadir Cucumber Tests">
+    <test name="Hadir Employee Tests">
         <classes>
-            <class name="id.co.juaracoding.hadir.runners.TestRunner" />
+            <class name="id.co.juaracoding.hadir.tests.employee.LoginTest"/>
+            <class name="id.co.juaracoding.hadir.tests.employee.AttendanceTest"/>
         </classes>
     </test>
 </suite>

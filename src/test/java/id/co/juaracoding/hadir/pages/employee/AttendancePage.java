@@ -16,13 +16,17 @@ public class AttendancePage extends BasePage {
     // --- Lokator halaman utama /apps/absent ---
 
     // Tombol "Absen Masuk" pada halaman utama absensi employee
-    private final By absenMasukButton = By.xpath("//button[contains(., 'Absen Masuk')]");
+    private final By absenMasukButton = By.xpath("//button[contains(., 'Absen Masuk') and not(ancestor::div[@role='dialog']) and not(ancestor::div[contains(@class, 'MuiDrawer-paper')])]");
 
-    // Tombol "Keluar" yang tampil setelah absen masuk berhasil
-    private final By keluarButton = By.xpath("//button[contains(., 'Keluar')]");
+    // Tombol "Keluar" / "Absen Keluar" pada kartu absensi
+    private final By keluarButton = By.xpath("//button[(contains(., 'Absen Keluar') or contains(., 'Keluar')) and not(ancestor::header) and not(ancestor::nav)]");
 
     // Elemen pemilih bulan yang menandakan halaman absensi sudah dimuat
     private final By monthButton = By.id("month");
+
+    // Heading section "History Absensi" — muncul setelah React selesai memuat data riwayat absensi dari API.
+    // Digunakan sebagai sinyal bahwa halaman sepenuhnya siap (termasuk async history records).
+    private final By historyAbsensiSection = By.xpath("//*[contains(normalize-space(text()), 'History Absensi')]");
 
     // --- Lokator modal Absen Masuk ---
 
@@ -52,6 +56,18 @@ public class AttendancePage extends BasePage {
     // Dialog / pesan error lokasi di DOM
     private final By locationErrorDialog = By.xpath("//*[contains(translate(text(), 'LOKASI', 'lokasi'), 'lokasi') or contains(translate(text(), 'LOCATION', 'location'), 'location') or contains(text(), 'User denied Geolocation')]");
 
+    // Pesan validasi dialog "Anda belum melakukan absen keluar"
+    // Locator di-scope ke dalam div[@role='dialog'] berdasarkan bukti aktual DOM MCP Playwright:
+    // <div role="dialog" class="...MuiDialog-paper..."><div class="MuiDialogContent-root"><p>Anda belum...</p></div></div>
+    private final By belumAbsenKeluarMessage = By.xpath("//div[@role='dialog']//p[contains(text(), 'Anda belum melakukan absen keluar')]");
+
+    // Kartu / record absensi yang memiliki status masuk (IN) namun belum checkout (waktu keluar '- -').
+    // PENTING: Elemen <p> memiliki multiple text nodes (React memecah teks ke beberapa node):
+    //   "Masuk pukul " | "04:16" | " -" | " " | "-"
+    // XPath text() hanya cocok dengan SATU text node sekaligus, sehingga contains(text(), '- -') tidak pernah match.
+    // Gunakan titik (.) yang mengevaluasi seluruh string value elemen (semua text nodes digabungkan).
+    private final By openAttendanceRecord = By.xpath("//p[contains(normalize-space(.), 'Masuk pukul') and contains(., '- -')]");
+
     /**
      * Konstruktor AttendancePage yang menginisialisasi WebDriver melalui superclass BasePage.
      *
@@ -69,26 +85,50 @@ public class AttendancePage extends BasePage {
         if (!getCurrentUrl().contains("/apps/absent")) {
             navigateTo(absentUrl);
         }
+        // Tunggu statistik bulanan (monthButton) dan kemudian section "History Absensi" agar
+        // async data riwayat yang di-fetch React juga sudah ada di DOM sebelum precondition check.
         waitForVisible(monthButton);
+        waitForVisible(historyAbsensiSection);
     }
 
     /**
      * Menekan tombol "Absen Masuk" pada halaman utama absensi setelah memastikan tombol clickable.
+     * Dilindungi dari StaleElementReferenceException akibat React DOM re-render dengan retry
+     * menggunakan By locator sebagai sumber pencarian ulang pada setiap percobaan.
      */
     public void clickAbsenMasuk() {
-        waitForClickable(absenMasukButton).click();
-        demoDelay();
+        int maxRetries = 3;
+
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                WebElement button = waitForClickable(absenMasukButton);
+                button.click();
+                demoDelay();
+                return;
+            } catch (org.openqa.selenium.StaleElementReferenceException stale) {
+                if (i == maxRetries - 1) {
+                    throw stale;
+                }
+
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted while recovering from stale element", e);
+                }
+            }
+        }
     }
 
     /**
-     * Memeriksa apakah tombol "Absen Masuk" tampil di layar menggunakan explicit wait.
+     * Memeriksa apakah tombol "Absen Masuk" tampil di layar menggunakan non-blocking findElements.
      *
      * @return true jika tombol Absen Masuk tersedia, false jika tidak
      */
     public boolean isAbsenMasukVisible() {
         try {
-            WebElement button = waitForVisible(absenMasukButton);
-            return button != null && button.isDisplayed();
+            java.util.List<WebElement> elements = driver.findElements(absenMasukButton);
+            return !elements.isEmpty() && elements.get(0).isDisplayed();
         } catch (Exception e) {
             return false;
         }
@@ -100,26 +140,65 @@ public class AttendancePage extends BasePage {
      * @return true jika tombol Keluar tersedia, false jika tidak
      */
     public boolean isKeluarButtonVisible() {
-        return isDisplayed(keluarButton);
+        try {
+            java.util.List<WebElement> elements = driver.findElements(keluarButton);
+            return !elements.isEmpty() && elements.get(0).isDisplayed();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
-     * Memeriksa apakah pengguna sudah melakukan Absen Masuk untuk hari ini
-     * berdasarkan status kehadiran aktual di dashboard (misal: tombol Keluar tampil
-     * atau tombol Absen Masuk tidak tersedia di halaman).
+     * Memeriksa apakah pengguna sudah melakukan Absen Masuk untuk hari ini.
+     * Kriteria: tombol "Absen Masuk" tidak tampil di layar.
+     * Tidak bergantung pada keluarButton karena tombol Keluar juga hadir di kartu
+     * History Absensi hari-hari sebelumnya sehingga tidak bisa dijadikan indikator.
      *
      * @return true jika sudah absen masuk hari ini, false jika belum
      */
     public boolean hasAlreadyCheckedInToday() {
-        java.util.List<WebElement> keluarButtons = driver.findElements(keluarButton);
-        if (!keluarButtons.isEmpty()) {
-            for (WebElement btn : keluarButtons) {
-                if (btn.isDisplayed()) {
-                    return true;
-                }
-            }
+        boolean absenMasukVis = isAbsenMasukVisible();
+        boolean alreadyCheckedIn = !absenMasukVis;
+
+        System.out.println("[DEBUG] Absen Masuk visible  : " + absenMasukVis);
+        System.out.println("[DEBUG] Already checked in   : " + alreadyCheckedIn);
+
+        return alreadyCheckedIn;
+    }
+
+    /**
+     * Memeriksa apakah pengguna memiliki record absensi yang memiliki status masuk (IN)
+     * namun belum checkout (waktu keluar bernilai '- -').
+     * Digunakan sebagai precondition untuk Positive Test 2 (STATE 2).
+     *
+     * @return true jika terdapat attendance yang belum checkout, false jika tidak
+     */
+    public boolean hasAttendanceBelumCheckout() {
+        try {
+            // Gunakan wait eksplisit karena History Absensi dimuat secara async oleh React/API.
+            // findElements() langsung tanpa wait akan mengembalikan list kosong sebelum DOM selesai dirender.
+            WebElement element = wait.until(
+                ExpectedConditions.visibilityOfElementLocated(openAttendanceRecord)
+            );
+            return element.isDisplayed();
+        } catch (Exception e) {
+            return false;
         }
-        return !isAbsenMasukVisible();
+    }
+
+    /**
+     * Memeriksa apakah pesan validasi drawer/dialog "Anda belum melakukan absen keluar"
+     * tampil di layar setelah menekan tombol Absen Masuk pada STATE 2.
+     *
+     * @return true jika pesan validasi tampil, false jika tidak
+     */
+    public boolean isBelumAbsenKeluarValidationVisible() {
+        try {
+            WebElement messageElement = waitForVisible(belumAbsenKeluarMessage);
+            return messageElement.isDisplayed();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -237,14 +316,14 @@ public class AttendancePage extends BasePage {
     }
 
     /**
-     * Menunggu proses Absen Masuk selesai dan UI terupdate dengan kondisi:
-     * Tombol Keluar menjadi tampil dan/atau tombol Absen Masuk menghilang dari layar.
+     * Menunggu proses Absen Masuk selesai dan UI terupdate.
+     * Kondisi tunggu: tombol "Absen Masuk" tidak lagi tampil di layar.
+     * Menggunakan invisibility saja (bukan OR) untuk menghindari race condition:
+     * kondisi OR sebelumnya terpenuhi seketika karena tombol "Keluar" di kartu
+     * History Absensi hari-hari sebelumnya selalu visible sejak halaman dimuat.
      */
     public void waitForAbsenMasukBerhasil() {
-        wait.until(ExpectedConditions.or(
-                ExpectedConditions.visibilityOfElementLocated(keluarButton),
-                ExpectedConditions.invisibilityOfElementLocated(absenMasukButton)
-        ));
+        wait.until(ExpectedConditions.invisibilityOfElementLocated(absenMasukButton));
     }
 
     /**

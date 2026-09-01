@@ -67,8 +67,17 @@ public class DriverFactory {
                     options.addArguments("--start-maximized");
                     options.addArguments("--disable-gpu");
                     options.addArguments("--disable-notifications");
+                    options.addArguments("--disable-save-password-bubble");
+                    options.addArguments("--password-store=basic");
 
                     Map<String, Object> prefs = new HashMap<>();
+
+                    // --- Menonaktifkan Password Manager & Leak Detection Pop-up ---
+                    prefs.put("credentials_enable_service", false);
+                    prefs.put("profile.password_manager_enabled", false);
+                    prefs.put("profile.password_manager_leak_detection", false);
+                    prefs.put("autofill.profile_enabled", false);
+                    prefs.put("autofill.credit_card_enabled", false);
 
                     // --- Konfigurasi Kamera ---
                     if (allowCamera) {

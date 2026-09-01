@@ -192,6 +192,20 @@ public abstract class BasePage {
     }
 
     /**
+     * Menunggu hingga URL halaman mengandung fraksi teks tertentu.
+     *
+     * @param urlFraction teks fraksi URL yang ditunggu
+     * @return true jika URL mengandung fraksi teks dalam batas waktu wait, false jika timeout
+     */
+    public boolean waitForUrlContains(String urlFraction) {
+        try {
+            return wait.until(ExpectedConditions.urlContains(urlFraction));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Mengambil judul halaman saat ini.
      */
     public String getTitle() {

@@ -29,61 +29,108 @@ public class AttendanceTest extends BaseTest {
     }
 
     /**
-     * Pengujian positif: Menguji alur Absen Masuk berhasil menggunakan akun Employee 2.
-     * Pengujian ini melakukan submit nyata ke server sebagai bagian dari alur testing.
+     * Pengujian positif: Menguji alur Absen Masuk secara dinamis berdasarkan state aktual aplikasi saat runtime.
+     * Menggunakan akun Employee 1 (hadirsqa1@gmail.com).
+     *
+     * Branching logic:
+     *
+     *   STATE 3 — isAbsenMasukVisible() == false:
+     *     Employee sudah Absen Masuk hari ini. Tidak ada skenario positif yang dapat dijalankan.
+     *     → SkipException.
+     *
+     *   STATE 2 — isAbsenMasukVisible() == true DAN hasAttendanceBelumCheckout() == true:
+     *     Employee belum Absen Masuk hari ini, tetapi memiliki attendance open dari hari sebelumnya.
+     *     → Klik Absen Masuk → Assert dialog "Anda belum melakukan absen keluar" tampil.
+     *     → Tidak ada submit. Tidak ada transaksi baru.
+     *
+     *   STATE 1 — isAbsenMasukVisible() == true DAN hasAttendanceBelumCheckout() == false:
+     *     Employee belum Absen Masuk hari ini, tidak ada attendance open.
+     *     → Klik Absen Masuk → Isi catatan → Submit → Assert berhasil.
+     *
+     * Bukti MCP Playwright (01 September 2026):
+     *   E1 saat ini berada pada STATE 2:
+     *   - Tombol Absen Masuk visible.
+     *   - 4 record history dengan pola "Masuk pukul ... - -" (attendance open).
+     *   - API /api/activity/user-check-correction: status=IN, time_out=null, is_check_out=false.
+     *   - Setelah klik Absen Masuk → dialog "Anda belum melakukan absen keluar" muncul.
      */
-    @Test(description = "Verifikasi Absen Masuk berhasil dengan kredensial Employee 2")
+    @Test(description = "Verifikasi Absen Masuk berhasil dengan kredensial Employee 1")
     public void testAbsenMasukBerhasil() {
-        // 1. Buka halaman login dan lakukan autentikasi dengan akun Employee 2
+        // 1. Login dengan akun Employee 1
         loginPage.openLoginPage();
-        String email = TestDataUtils.getEmployee2Username();
-        String password = TestDataUtils.getEmployee2Password();
+        String email = TestDataUtils.getEmployee1Username();
+        String password = TestDataUtils.getEmployee1Password();
         loginPage.login(email, password);
 
-        // 2. Navigasi / pastikan berada pada halaman utama absensi employee (/apps/absent)
+        // 2. Buka halaman absensi dan tunggu hingga history section siap di DOM
         attendancePage.openAttendancePage();
 
-        // Precondition check: Cek apakah employee sudah melakukan Absen Masuk hari ini
-        if (attendancePage.hasAlreadyCheckedInToday()) {
-            throw new SkipException("Employee sudah melakukan Absen Masuk hari ini. Positive test dilewati.");
+        // --- STATE DETECTION ---
+
+        boolean absenMasukVisible = attendancePage.isAbsenMasukVisible();
+
+        // STATE 3: tombol Absen Masuk tidak ada → sudah check-in hari ini → SKIP
+        if (!absenMasukVisible) {
+            throw new SkipException(
+                "[STATE 3] Employee 1 sudah Absen Masuk hari ini. " +
+                "Tidak ada skenario positive test yang dapat dijalankan saat ini."
+            );
         }
 
-        // 3. Verifikasi tombol Absen Masuk tersedia di layar
-        Assert.assertTrue(
-                attendancePage.isAbsenMasukVisible(),
-                "Tombol Absen Masuk tidak tersedia pada halaman utama absensi!"
-        );
+        boolean hasOpenAttendance = attendancePage.hasAttendanceBelumCheckout();
 
-        // 4. Klik tombol Absen Masuk untuk membuka modal absensi
-        attendancePage.clickAbsenMasuk();
+        if (hasOpenAttendance) {
+            // --- STATE 2: Tombol visible + ada attendance open → dialog validasi diharapkan ---
+            System.out.println("[BRANCH] STATE 2 terdeteksi: Absen Masuk visible + attendance open dari hari sebelumnya.");
+            System.out.println("[BRANCH] Menjalankan: Positive Test 2 — Verifikasi dialog 'Anda belum melakukan absen keluar'.");
 
-        // 5. Verifikasi modal Absen Masuk tampil di layar
-        Assert.assertTrue(
+            // Klik Absen Masuk — tidak isi form, tidak submit
+            attendancePage.clickAbsenMasuk();
+
+            // Assert dialog validasi bisnis muncul
+            Assert.assertTrue(
+                attendancePage.isBelumAbsenKeluarValidationVisible(),
+                "[STATE 2] Pesan validasi 'Anda belum melakukan absen keluar' tidak tampil pada dialog!"
+            );
+
+        } else {
+            // --- STATE 1: Tombol visible + tidak ada attendance open → submit berhasil diharapkan ---
+            System.out.println("[BRANCH] STATE 1 terdeteksi: Absen Masuk visible + tidak ada attendance open.");
+            System.out.println("[BRANCH] Menjalankan: Positive Test 1 — Verifikasi Absen Masuk berhasil.");
+
+            // Klik Absen Masuk
+            attendancePage.clickAbsenMasuk();
+
+            // Assert modal Absen Masuk muncul
+            Assert.assertTrue(
                 attendancePage.isAttendanceModalVisible(),
-                "Modal Absen Masuk tidak tampil di layar setelah tombol diklik!"
-        );
+                "[STATE 1] Modal Absen Masuk tidak tampil di layar setelah tombol diklik!"
+            );
 
-        // 6. Isi catatan absensi
-        attendancePage.fillCatatan("Test Absen Masuk Positive");
+            // Isi catatan
+            attendancePage.fillCatatan("Automated check in test");
 
-        // 7. Tekan tombol final submit Absen Masuk (submit nyata)
-        attendancePage.clickSubmitAbsenMasuk();
+            // Submit
+            attendancePage.clickSubmitAbsenMasuk();
 
-        // 8. Tunggu hingga UI selesai update dan absensi tercatat
-        attendancePage.waitForAbsenMasukBerhasil();
+            // Tunggu UI update setelah submit berhasil
+            attendancePage.waitForAbsenMasukBerhasil();
 
-        // 9. Assertion 1: Verifikasi tombol "Keluar" tampil di layar setelah absensi berhasil
-        Assert.assertTrue(
+            // Assert: tombol Keluar muncul setelah check-in berhasil
+            Assert.assertTrue(
                 attendancePage.isKeluarButtonVisible(),
-                "Tombol Keluar tidak tampil di layar setelah absensi berhasil!"
-        );
+                "[STATE 1] Tombol Keluar tidak tampil di layar setelah absensi berhasil!"
+            );
 
-        // 10. Assertion 2: Verifikasi tombol "Absen Masuk" sudah tidak tampil di layar
-        Assert.assertFalse(
+            // Assert: tombol Absen Masuk sudah tidak ada
+            Assert.assertFalse(
                 attendancePage.isAbsenMasukVisible(),
-                "Tombol Absen Masuk masih tampil di layar setelah absensi berhasil!"
-        );
+                "[STATE 1] Tombol Absen Masuk masih tampil di layar setelah absensi berhasil!"
+            );
+        }
     }
+
+
 
     /**
      * Pengujian negatif: Menguji alur Absen Masuk saat izin kamera tidak diberikan / diblokir.

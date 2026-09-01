@@ -5,7 +5,8 @@ import java.io.FileInputStream;
 import java.util.Properties;
 
 /**
- * Utilitas untuk membaca data pengujian dan kredensial akun dari berkas .env-hadir.
+ * Utilitas untuk membaca data pengujian dan kredensial akun dari berkas
+ * .env-hadir.
  */
 public class TestDataUtils {
 
@@ -42,6 +43,30 @@ public class TestDataUtils {
             return envValue.trim();
         }
         return properties.getProperty(key, "").trim();
+    }
+
+    /**
+     * Mengambil username / email untuk Login Admin.
+     *
+     * Digunakan khusus untuk kebutuhan automation login Admin.
+     *
+     * @return username / email Admin dari environment variable
+     *         atau berkas .env-hadir
+     */
+    public static String getAdminUsername() {
+        return get("USERNAME_ADMIN");
+    }
+
+    /**
+     * Mengambil kata sandi untuk Login Admin.
+     *
+     * Digunakan khusus untuk kebutuhan automation login Admin.
+     *
+     * @return kata sandi Admin dari environment variable
+     *         atau berkas .env-hadir
+     */
+    public static String getAdminPassword() {
+        return get("PASSWORD_ADMIN");
     }
 
     /**
@@ -84,5 +109,41 @@ public class TestDataUtils {
      */
     public static String getEmployee3Password() {
         return get("PASSWORD_EMPLOYEE_3");
+    }
+
+    /**
+     * Mengambil mode status pengujian registrasi (REGISTER_EXISTING atau
+     * REGISTER_NEW).
+     */
+    public static String getRegisterTestState() {
+        return get("REGISTER_TEST_STATE");
+    }
+
+    /**
+     * Mengambil NIK untuk kebutuhan registrasi akun baru.
+     */
+    public static String getRegisterNik() {
+        return get("REGISTER_NIK");
+    }
+
+    /**
+     * Mengambil nama lengkap untuk kebutuhan registrasi akun baru.
+     */
+    public static String getRegisterFullname() {
+        return get("REGISTER_FULLNAME");
+    }
+
+    /**
+     * Mengambil alamat email untuk kebutuhan registrasi akun baru.
+     */
+    public static String getRegisterEmail() {
+        return get("REGISTER_EMAIL");
+    }
+
+    /**
+     * Mengambil kata sandi untuk kebutuhan registrasi akun baru.
+     */
+    public static String getRegisterPassword() {
+        return get("REGISTER_PASSWORD");
     }
 }

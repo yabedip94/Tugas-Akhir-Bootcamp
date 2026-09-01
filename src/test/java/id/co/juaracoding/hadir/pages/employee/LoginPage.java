@@ -18,6 +18,7 @@ public class LoginPage extends BasePage {
     private final By errorMessage = By.cssSelector("div[role='alert']");
     private final By monthButton = By.id("month");
     private final By welcomeText = By.xpath("//*[contains(normalize-space(), 'Hai, Hadir SQA Testing 1')]");
+    private final By attendanceStatusButton = By.xpath("//button[contains(., 'Absen Masuk') or contains(., 'Keluar')]");
 
     /**
      * Konstruktor LoginPage yang menginisialisasi WebDriver melalui superclass
@@ -75,7 +76,7 @@ public class LoginPage extends BasePage {
         wait.until(ExpectedConditions.or(
                 ExpectedConditions.and(
                         ExpectedConditions.urlContains("/apps/absent"),
-                        ExpectedConditions.visibilityOfElementLocated(monthButton)
+                        ExpectedConditions.visibilityOfElementLocated(attendanceStatusButton)
                 ),
                 ExpectedConditions.visibilityOfElementLocated(errorMessage)
         ));
